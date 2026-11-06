@@ -1,0 +1,12 @@
+{
+  "resources": {
+    "includes": [
+      { "pattern": "assets/.*" },
+      { "pattern": "data/.*" },
+      { "pattern": "META-INF/.*" },
+      { "pattern": "log4j2.*\\.xml" },
+      { "pattern": "version\\.json" }
+    ]
+  },
+  "bundles": []
+}

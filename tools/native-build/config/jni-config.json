@@ -1,0 +1,37 @@
+[
+  {
+    "name": "org.lwjgl.system.JNI",
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
+    "name": "org.lwjgl.system.MemoryUtil",
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
+    "name": "org.lwjgl.glfw.GLFW",
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
+    "name": "org.lwjgl.vulkan.VK10",
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
+    "name": "org.lwjgl.vulkan.VK11",
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
+    "name": "org.lwjgl.openal.AL10",
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  },
+  {
+    "name": "org.lwjgl.stb.STBImage",
+    "allDeclaredMethods": true,
+    "allPublicMethods": true
+  }
+]

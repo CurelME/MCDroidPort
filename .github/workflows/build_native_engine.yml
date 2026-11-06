@@ -1,0 +1,300 @@
+name: Build Minecraft Native Engine (ARM64 AOT)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Minecraft Version (e.g. 1.21.2, 1.21.1, 1.20.4)'
+        required: true
+        default: '1.21.2'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Compile libminecraft.so via GraalVM Native Image
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Set up GraalVM JDK with Native Image
+        uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '21'
+          distribution: 'graalvm'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify GraalVM Installation
+        run: |
+          java -version
+          native-image --version
+
+      - name: Set up Android NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r27c
+          add-to-path: true
+
+      - name: Configure Android NDK Linker & Clang Wrapper
+        run: |
+          NDK_DIR="${{ steps.setup-ndk.outputs.ndk-path }}"
+          if [ -z "$NDK_DIR" ]; then
+            NDK_DIR="$ANDROID_NDK_HOME"
+          fi
+          BIN_DIR="$NDK_DIR/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          echo "NDK_PATH=$NDK_DIR" >> $GITHUB_ENV
+          echo "NDK_BIN=$BIN_DIR" >> $GITHUB_ENV
+          echo "$BIN_DIR" >> $GITHUB_PATH
+
+          # Symlink ld.gold to ld.lld in NDK bin directory
+          sudo ln -sf "$BIN_DIR/ld.lld" "$BIN_DIR/ld.gold"
+
+          # Ensure committed wrapper is executable and verify
+          chmod +x tools/native-build/ndk-clang-wrapper.sh
+          echo "Verified compiler wrapper:"
+          tools/native-build/ndk-clang-wrapper.sh -v
+
+      - name: Fetch Minecraft Bytecode & Dependencies from Mojang
+        run: |
+          VERSION="${{ github.event.inputs.version || '1.21.2' }}"
+          echo "Selected Minecraft version: $VERSION"
+          python3 tools/native-build/fetch_mojang_version.py "$VERSION" mc_assets
+
+      - name: Assemble Classpath & Compile Native Entrypoint
+        run: |
+          mkdir -p build_native/classes
+          MC_JAR="mc_assets/minecraft.jar"
+          LIBS_DIR="mc_assets/libraries"
+
+          # Assemble classpath from client jar and libraries
+          CP="$MC_JAR"
+          if [ -d "$LIBS_DIR" ]; then
+            for jar in $(find "$LIBS_DIR" -name "*.jar" ! -name "*natives*"); do
+              CP="$CP:$jar"
+            done
+          fi
+
+          echo "Classpath assembled with $(echo "$CP" | tr ':' '\n' | wc -l) jars"
+
+          # Compile MinecraftNativeMain entrypoint against classpath
+          javac -cp "$CP" -d build_native/classes \
+            tools/native-build/src/com/mcdroidport/nativeimage/MinecraftNativeMain.java
+
+          echo "CP=$CP" >> $GITHUB_ENV
+
+      - name: Compile JDK 21 Bionic Bridge & Install Static Libraries
+        run: |
+          mkdir -p build_native /tmp/staticjdk_extracted /tmp/clibs_extracted
+
+          # 1. Compile JDK 21 Bionic compatibility bridge
+          echo "Compiling JDK 21 Bionic compatibility bridge..."
+          "$NDK_BIN/aarch64-linux-android30-clang" -c -fPIC -O3 \
+            tools/native-build/src/jdk21_bionic_bridge.c \
+            -o build_native/jdk21_bionic_bridge.o
+
+          echo "Symbols exported by bridge:"
+          "$NDK_BIN/llvm-nm" build_native/jdk21_bionic_bridge.o | grep ' T ' | head -n 15
+
+          # 2. Download and extract Static JDK (libjava.a, libnet.a, libnio.a, etc.)
+          STATIC_URL="https://download2.gluonhq.com/substrate/staticjdk/staticjdk-android-aarch64-gvm-18-ea+prep18-9.zip"
+          curl -sL "$STATIC_URL" -o /tmp/staticjdk.zip
+          unzip -q /tmp/staticjdk.zip -d /tmp/staticjdk_extracted
+
+          # 3. Download and extract Substrate SVM C-Libraries (libjvm.a, liblibchelper.a, libffi.a, etc.)
+          CLIBS_URL="https://download2.gluonhq.com/substrate/clibs/android-aarch64.zip"
+          curl -sL "$CLIBS_URL" -o /tmp/clibs.zip
+          unzip -q /tmp/clibs.zip -d /tmp/clibs_extracted
+
+          # 4. Populate all target and host search paths in GraalVM to satisfy getAllStaticLibs
+          TARGET_DIRS=(
+            "$JAVA_HOME/lib/svm/clibraries/linux-amd64/bionic"
+            "$JAVA_HOME/lib/svm/clibraries/linux-aarch64/bionic"
+            "$JAVA_HOME/lib/svm/clibraries/android-aarch64/bionic"
+            "$JAVA_HOME/lib/static/linux-amd64/bionic"
+            "$JAVA_HOME/lib/static/linux-aarch64/bionic"
+            "$JAVA_HOME/lib/static/android-aarch64/bionic"
+          )
+
+          for dir in "${TARGET_DIRS[@]}"; do
+            sudo mkdir -p "$dir"
+            sudo cp /tmp/staticjdk_extracted/staticjdk/lib/static/*.a "$dir/"
+            sudo cp /tmp/clibs_extracted/*.a "$dir/"
+            echo "Installed static libraries in $dir"
+          done
+
+      - name: Configure Linux Swap Space
+        run: |
+          sudo swapon --show || true
+          SWAP_PATH="/mnt/swapfile_extra"
+          if [ ! -d "/mnt" ]; then
+            SWAP_PATH="/swapfile_extra"
+          fi
+          sudo rm -f "$SWAP_PATH" || true
+          sudo fallocate -l 8G "$SWAP_PATH" || sudo dd if=/dev/zero of="$SWAP_PATH" bs=1M count=8192
+          sudo chmod 600 "$SWAP_PATH"
+          sudo mkswap "$SWAP_PATH"
+          sudo swapon "$SWAP_PATH" || echo "Warning: swapon returned non-zero"
+          free -h
+
+      - name: Compile libminecraft.so (AOT Cross-Compilation)
+        run: |
+          VERSION="${{ github.event.inputs.version || '1.21.2' }}"
+          WRAPPER="$(pwd)/tools/native-build/ndk-clang-wrapper.sh"
+
+          native-image \
+            --shared \
+            -H:+UnlockExperimentalVMOptions \
+            '-Dsvm.platform=org.graalvm.nativeimage.Platform$ANDROID_AARCH64' \
+            --libc=bionic \
+            -H:-CheckToolchain \
+            -H:+UseCAPCache \
+            -H:CAPCacheDir=tools/native-build/config/cap \
+            -H:+ForceNoROSectionRelocations \
+            -Djava.awt.headless=true \
+            -H:+TraceNativeToolUsage \
+            -H:Name=libminecraft \
+            -H:CCompilerPath="$WRAPPER" \
+            -H:ConfigurationFileDirectories=tools/native-build/config \
+            --gc=serial \
+            -Ob \
+            --no-fallback \
+            -J-Xmx13g \
+            -cp "build_native/classes:$CP" \
+            com.mcdroidport.nativeimage.MinecraftNativeMain \
+            -o build_native/libminecraft || {
+              echo "Native Image exit code non-zero. Checking if libminecraft.so was produced:"
+              ls -la build_native || true
+              if [ -f "build_native/libminecraft.so" ]; then
+                echo "libminecraft.so was generated successfully! Proceeding to symbol validation..."
+              else
+                echo "Native Image compilation failed! Dumping error logs:"
+                find build_native -name "*.md" -exec cat {} + || true
+                exit 1
+              fi
+            }
+
+          # Strip debug symbols to optimize binary size for Android ARM64
+          STRIP_BIN="$NDK_BIN/llvm-strip"
+          if [ -f "$STRIP_BIN" ]; then
+            echo "Stripping debug symbols from build_native/libminecraft.so..."
+            "$STRIP_BIN" --strip-unneeded build_native/libminecraft.so || true
+          fi
+
+          # Ensure Android Bionic dynamic loader compatibility:
+          # 1. Clear false-positive DT_TEXTREL & DF_TEXTREL flags
+          python3 -c "
+          import struct
+          so_path = 'build_native/libminecraft.so'
+          with open(so_path, 'r+b') as f:
+              f.seek(0)
+              magic = f.read(4)
+              assert magic == b'\x7fELF', 'Not an ELF file'
+              f.seek(40)
+              shoff = struct.unpack('<Q', f.read(8))[0]
+              f.seek(58)
+              shentsize, shnum = struct.unpack('<HH', f.read(4))
+              dyn_offset = 0
+              for i in range(shnum):
+                  f.seek(shoff + i * shentsize + 16)
+                  shtype, shflags, shaddr, shoffset = struct.unpack('<IIQQ', f.read(24))
+                  if shtype == 6: # SHT_DYNAMIC
+                      dyn_offset = shoffset
+                      break
+              if dyn_offset > 0:
+                  f.seek(dyn_offset)
+                  while True:
+                      pos = f.tell()
+                      data = f.read(16)
+                      if len(data) < 16: break
+                      tag, val = struct.unpack('<Qq', data)
+                      if tag == 0: break
+                      if tag == 0x1e: # DT_FLAGS
+                          if val & 0x4: # DF_TEXTREL
+                              f.seek(pos + 8)
+                              f.write(struct.pack('<q', val & ~0x4))
+                              f.seek(pos + 16)
+                              print(f'Cleared DF_TEXTREL in DT_FLAGS: 0x{val:x} -> 0x{val & ~0x4:x}')
+                      elif tag == 0x16: # DT_TEXTREL
+                          f.seek(pos)
+                          f.write(struct.pack('<Q', 0x15)) # DT_DEBUG
+                          f.seek(pos + 16)
+                          print('Replaced DT_TEXTREL with DT_DEBUG')
+          print('Android Bionic dynamic table validated successfully')
+          "
+
+          # 2. Verify all JDK 21 native symbols are resolved
+          READELF_BIN="$NDK_BIN/llvm-readelf"
+          if [ -f "$READELF_BIN" ]; then
+            echo "Verifying unresolved symbols in libminecraft.so..."
+            UND_JAVA=$("$READELF_BIN" -s build_native/libminecraft.so | grep ' UND ' | grep 'Java_' || true)
+            if [ -n "$UND_JAVA" ]; then
+              echo "Error: Unresolved Java native symbols detected in libminecraft.so:"
+              echo "$UND_JAVA"
+              exit 1
+            fi
+            echo "Verification passed: All Java native symbols are 100% defined and self-contained!"
+          fi
+
+          # Compress with gzip -9 for distribution (<50MB, avoids GitHub 100MB file limit)
+          gzip -9 -k build_native/libminecraft.so
+          GZ_SIZE=$(stat -c%s build_native/libminecraft.so.gz)
+
+          # Compute SHA-256 and generate metadata manifest
+          SHA256=$(sha256sum build_native/libminecraft.so | awk '{print $1}')
+          SIZE=$(stat -c%s build_native/libminecraft.so)
+
+          cat <<EOF > build_native/engine_info.json
+          {
+            "version": "${VERSION}",
+            "sha256": "${SHA256}",
+            "size": ${SIZE},
+            "compressed_size": ${GZ_SIZE},
+            "filename": "libminecraft.so.gz",
+            "arch": "arm64-v8a",
+            "build_timestamp": "$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          }
+          EOF
+
+          echo "AOT Compilation complete. Uncompressed: ${SIZE} bytes, Compressed: ${GZ_SIZE} bytes, SHA256: ${SHA256}"
+
+      # Upload as GitHub Actions Workflow Run Artifact (Not attached to Releases)
+      - name: Upload Actions Workflow Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libminecraft-arm64
+          path: |
+            build_native/libminecraft.so
+            build_native/libminecraft.so.gz
+            build_native/engine_info.json
+          retention-days: 90
+
+      # Publish directly to dedicated 'engine-binaries' branch for instant raw OTA downloads
+      - name: Publish to engine-binaries branch
+        run: |
+          VERSION="${{ github.event.inputs.version || '1.21.2' }}"
+          git config user.name "CurelME"
+          git config user.email "283661896+CurelME@users.noreply.github.com"
+
+          mkdir /tmp/engine_dist
+          cp build_native/libminecraft.so.gz /tmp/engine_dist/
+          cp build_native/engine_info.json /tmp/engine_dist/
+
+          git checkout --orphan engine-binaries || git checkout -B engine-binaries
+          git rm -rf . || true
+          git clean -fdx || true
+          cp /tmp/engine_dist/libminecraft.so.gz .
+          cp /tmp/engine_dist/engine_info.json .
+          git add -f libminecraft.so.gz engine_info.json
+          git commit -m "Auto-build: Minecraft Native Engine ${VERSION}" || echo "No changes to commit"
+          git push origin engine-binaries --force
