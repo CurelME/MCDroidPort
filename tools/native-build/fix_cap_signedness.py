@@ -4,6 +4,50 @@ import glob
 def fix_all():
     cap_dir = 'tools/native-build/config/cap'
     
+    standard_primitives = [
+        ('unsigned_char', 1, '$UNSIGNED$'),
+        ('signed_char', 1, '$SIGNED$'),
+        ('unsigned_short', 2, '$UNSIGNED$'),
+        ('unsigned_int', 4, '$UNSIGNED$'),
+        ('long', 8, '$SIGNED$'),
+        ('unsigned_long', 8, '$UNSIGNED$'),
+        ('unsigned_long_long', 8, '$UNSIGNED$'),
+        ('bool', 1, '$UNSIGNED$'),
+        ('_Bool', 1, '$UNSIGNED$'),
+        ('int8_t', 1, '$SIGNED$'),
+        ('uint8_t', 1, '$UNSIGNED$'),
+        ('int16_t', 2, '$SIGNED$'),
+        ('uint16_t', 2, '$UNSIGNED$'),
+        ('int32_t', 4, '$SIGNED$'),
+        ('uint32_t', 4, '$UNSIGNED$'),
+        ('int64_t', 8, '$SIGNED$'),
+        ('uint64_t', 8, '$UNSIGNED$'),
+        ('size_t', 8, '$UNSIGNED$'),
+        ('ssize_t', 8, '$SIGNED$'),
+        ('intptr_t', 8, '$SIGNED$'),
+        ('uintptr_t', 8, '$UNSIGNED$'),
+        ('ptrdiff_t', 8, '$SIGNED$'),
+    ]
+
+    target_directives = ['BuiltinDirectives', 'JNIHeaderDirectives', 'PosixDirectives']
+    for directive in target_directives:
+        cap_file = os.path.join(cap_dir, f'{directive}.cap')
+        if not os.path.exists(cap_file):
+            continue
+        with open(cap_file, 'r') as fp:
+            lines = [l.strip() for l in fp.read().splitlines() if l.strip()]
+        
+        for name, sz, sign in standard_primitives:
+            for variant, var_sz, var_sign in [(name, sz, sign), (f'{name}_', 8, '$UNSIGNED$'), (f'{name}__', 8, '$UNSIGNED$')]:
+                size_entry = f'NativeCodeInfo:{directive}:PointerToInfo:{variant}:PropertyInfo:size={var_sz}'
+                sign_entry = f'NativeCodeInfo:{directive}:PointerToInfo:{variant}:PropertyInfo:signedness={var_sign}'
+                if not any(l.startswith(f'NativeCodeInfo:{directive}:PointerToInfo:{variant}:PropertyInfo:size=') for l in lines):
+                    lines.append(size_entry)
+                    lines.append(sign_entry)
+                    print(f'{directive}: added {variant}')
+        with open(cap_file, 'w', newline='\n') as fp:
+            fp.write('\n'.join(lines) + '\n')
+
     extra_pointers = {
         'BuiltinDirectives': [
             'char__', 'double_', 'double__', 'float_', 'float__',
@@ -49,8 +93,7 @@ def fix_all():
         if not os.path.exists(cap_file):
             continue
         with open(cap_file, 'r') as fp:
-            content = fp.read()
-        lines = [l.strip() for l in content.splitlines() if l.strip()]
+            lines = [l.strip() for l in fp.read().splitlines() if l.strip()]
         for p in ptrs:
             size_entry = f'NativeCodeInfo:{directive}:PointerToInfo:{p}:PropertyInfo:size=8'
             sign_entry = f'NativeCodeInfo:{directive}:PointerToInfo:{p}:PropertyInfo:signedness=$UNSIGNED$'
@@ -63,7 +106,7 @@ def fix_all():
 
     # Verify signedness on ALL PointerToInfo and ConstantInfo across all cap files
     cap_files = glob.glob(os.path.join(cap_dir, '*.cap'))
-    signed_primitives = {'int', 'short', 'long_long', 'long_long_int', 'float', 'double', 'int32_t', 'int64_t'}
+    signed_primitives = {'int', 'short', 'long_long', 'long_long_int', 'float', 'double', 'int32_t', 'int64_t', 'signed_char', 'ssize_t', 'int8_t', 'int16_t', 'intptr_t', 'ptrdiff_t', 'long'}
 
     for f in cap_files:
         with open(f, 'r') as fp:
@@ -87,7 +130,7 @@ def fix_all():
                 
                 signed_prefix = f'NativeCodeInfo:{directive}:PointerToInfo:{type_name}:PropertyInfo:signedness='
                 if not any(x.startswith(signed_prefix) for x in lines):
-                    val = '$SIGNED$' if type_name in signed_primitives else '$UNSIGNED$'
+                    val = '$SIGNED$' if type_name in signed_primitives and not type_name.endswith('_') else '$UNSIGNED$'
                     new_line = f'NativeCodeInfo:{directive}:PointerToInfo:{type_name}:PropertyInfo:signedness={val}'
                     new_lines.append(new_line)
                     modified = True
