@@ -29,7 +29,7 @@ def fix_all():
         ('ptrdiff_t', 8, '$SIGNED$'),
     ]
 
-    target_directives = ['BuiltinDirectives', 'JNIHeaderDirectives', 'PosixDirectives']
+    target_directives = ['BuiltinDirectives', 'JNIHeaderDirectives', 'PosixDirectives', 'LocaleDirectives']
     for directive in target_directives:
         cap_file = os.path.join(cap_dir, f'{directive}.cap')
         if not os.path.exists(cap_file):
