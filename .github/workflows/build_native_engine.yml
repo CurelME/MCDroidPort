@@ -163,6 +163,7 @@ jobs:
             '-Dsvm.platform=org.graalvm.nativeimage.Platform$ANDROID_AARCH64' \
             --libc=bionic \
             -H:-CheckToolchain \
+            -H:-ForeignAPISupport \
             -H:+UseCAPCache \
             -H:CAPCacheDir=tools/native-build/config/cap \
             -Djava.awt.headless=true \

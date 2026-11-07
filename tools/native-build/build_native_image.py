@@ -164,6 +164,7 @@ def build_native_library(args):
         "-H:+UnlockExperimentalVMOptions",
         "-Dsvm.platform=org.graalvm.nativeimage.Platform$ANDROID_AARCH64",
         "--libc=bionic",
+        "-H:-ForeignAPISupport",
         "-H:+UseCAPCache",
         f"-H:CAPCacheDir={CONFIG_DIR / 'cap'}",
         "-H:Name=libminecraft",
