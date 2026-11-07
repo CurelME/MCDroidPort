@@ -157,8 +157,9 @@ jobs:
           VERSION="${{ github.event.inputs.version || '26.3' }}"
           WRAPPER="$(pwd)/tools/native-build/ndk-clang-wrapper.sh"
 
-          # Diagnostic scan of GraalVM Directives classes
+          # Diagnostic scan of GraalVM Directives classes and ensure CAP signedness
           python3 tools/native-build/inspect_directives.py || true
+          python3 tools/native-build/fix_cap_signedness.py || true
 
           native-image \
             --shared \

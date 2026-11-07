@@ -74,3 +74,4 @@ NativeCodeInfo:LibFFIHeaderDirectives:StructInfo:ffi_cif:StructFieldInfo:nargs:P
 NativeCodeInfo:LibFFIHeaderDirectives:StructInfo:ffi_cif:StructFieldInfo:nargs:PropertyInfo:offset=4
 NativeCodeInfo:LibFFIHeaderDirectives:StructInfo:ffi_cif:StructFieldInfo:nargs:PropertyInfo:signedness=$UNSIGNED$
 NativeCodeInfo:LibFFIHeaderDirectives:PointerToInfo:ffi_type_:PropertyInfo:size=8
+NativeCodeInfo:LibFFIHeaderDirectives:PointerToInfo:ffi_type_:PropertyInfo:signedness=$UNSIGNED$
