@@ -81,7 +81,16 @@ def parse_class(data):
         if name_idx < len(cp) and cp[name_idx] and cp[name_idx][0] == 'Utf8':
             super_name = cp[name_idx][1]
 
-    return this_name, super_name, interfaces
+    utf8_strings = [item[1] for item in cp if item and item[0] == 'Utf8']
+    return this_name, super_name, interfaces, utf8_strings
+
+def search_files(directory, pattern):
+    results = []
+    for root, dirs, files in os.walk(directory):
+        for f in files:
+            if pattern.lower() in f.lower():
+                results.append(os.path.join(root, f))
+    return results
 
 def main():
     graal_home = os.environ.get('GRAALVM_HOME', os.environ.get('JAVA_HOME', ''))
@@ -90,7 +99,22 @@ def main():
     cap_dir = "tools/native-build/config/cap"
     os.makedirs(cap_dir, exist_ok=True)
     
+    # 1. Search for svm_locale.h or locale headers on the system
+    print("=== Searching for svm_locale.h or locale C headers ===")
+    search_roots = [graal_home, "/tmp", "tools/native-build", "mc_assets"]
+    for s_root in search_roots:
+        if os.path.exists(s_root):
+            for h in search_files(s_root, "locale"):
+                if h.endswith('.h') or h.endswith('.c'):
+                    print(f"Found header/source: {h}")
+                    try:
+                        with open(h, 'r', errors='ignore') as fp:
+                            print(fp.read())
+                    except Exception as e:
+                        print("Error reading:", e)
+
     directives = set()
+    locale_classes = []
     
     for root, dirs, files in os.walk(graal_home):
         for f in files:
@@ -101,6 +125,10 @@ def main():
                         for name in z.namelist():
                             if not name.endswith('.class'):
                                 continue
+                            
+                            if 'locale' in name.lower():
+                                locale_classes.append((jar_path, name))
+                                
                             if 'Directives' not in name:
                                 continue
                             try:
@@ -111,7 +139,7 @@ def main():
                             parsed = parse_class(data)
                             if not parsed:
                                 continue
-                            this_name, super_name, interfaces = parsed
+                            this_name, super_name, interfaces, _ = parsed
                             
                             is_directive = False
                             if 'org/graalvm/nativeimage/c/CContext$Directives' in interfaces:
@@ -146,10 +174,20 @@ def main():
         if 'Locale' in name or 'Container' in name or 'JNI' in name:
             print(f"=== JAVAP FOR {class_name} ===")
             try:
-                res = subprocess.run([javap_bin, '-p', '-cp', jar, class_name], capture_output=True, text=True)
+                res = subprocess.run([javap_bin, '-p', '-v', '-cp', jar, class_name], capture_output=True, text=True)
                 print(res.stdout)
             except Exception as e:
                 print("javap error:", e)
+
+    print("=== DUMPING ALL LOCALE-RELATED CLASSES ===")
+    for jar, name in sorted(locale_classes, key=lambda x: x[1]):
+        class_name = name[:-6].replace('/', '.')
+        print(f"\n--- Class: {class_name} in {os.path.basename(jar)} ---")
+        try:
+            res = subprocess.run([javap_bin, '-p', '-v', '-cp', jar, class_name], capture_output=True, text=True)
+            print(res.stdout)
+        except Exception as e:
+            print("javap error:", e)
 
 if __name__ == '__main__':
     main()
