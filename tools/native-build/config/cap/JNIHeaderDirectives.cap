@@ -46,6 +46,8 @@ NativeCodeInfo:JNIHeaderDirectives:ConstantInfo:JNI_VERSION_1_8:PropertyInfo:val
 NativeCodeInfo:JNIHeaderDirectives:ConstantInfo:JNI_VERSION_9:PropertyInfo:size=4
 NativeCodeInfo:JNIHeaderDirectives:ConstantInfo:JNI_VERSION_9:PropertyInfo:signedness=$UNSIGNED$
 NativeCodeInfo:JNIHeaderDirectives:ConstantInfo:JNI_VERSION_9:PropertyInfo:value=90000
+NativeCodeInfo:JNIHeaderDirectives:EnumInfo:jobjectRefType:PropertyInfo:size=4
+NativeCodeInfo:JNIHeaderDirectives:EnumInfo:jobjectRefType:PropertyInfo:signedness=$SIGNED$
 NativeCodeInfo:JNIHeaderDirectives:EnumInfo:jobjectRefType:EnumConstantInfo:JNIGlobalRefType:PropertyInfo:size=4
 NativeCodeInfo:JNIHeaderDirectives:EnumInfo:jobjectRefType:EnumConstantInfo:JNIGlobalRefType:PropertyInfo:signedness=$UNSIGNED$
 NativeCodeInfo:JNIHeaderDirectives:EnumInfo:jobjectRefType:EnumConstantInfo:JNIGlobalRefType:PropertyInfo:value=2
