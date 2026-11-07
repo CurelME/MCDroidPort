@@ -166,7 +166,6 @@ def build_native_library(args):
         "--libc=bionic",
         "-H:+UseCAPCache",
         f"-H:CAPCacheDir={CONFIG_DIR / 'cap'}",
-        "-H:+ForceNoROSectionRelocations",
         "-H:Name=libminecraft",
         "--gc=serial",
         "-O3",

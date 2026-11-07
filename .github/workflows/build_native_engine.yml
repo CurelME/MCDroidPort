@@ -165,7 +165,6 @@ jobs:
             -H:-CheckToolchain \
             -H:+UseCAPCache \
             -H:CAPCacheDir=tools/native-build/config/cap \
-            -H:+ForceNoROSectionRelocations \
             -Djava.awt.headless=true \
             -H:+TraceNativeToolUsage \
             -H:Name=libminecraft \
