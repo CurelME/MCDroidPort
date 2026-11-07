@@ -4,7 +4,6 @@ import glob
 def fix_all():
     cap_dir = 'tools/native-build/config/cap'
     
-    # Extra pointers to ensure in BuiltinDirectives and JNIHeaderDirectives
     extra_pointers = {
         'BuiltinDirectives': [
             'char__', 'double_', 'double__', 'float_', 'float__',
@@ -13,7 +12,35 @@ def fix_all():
             'struct_JNIEnv___', 'struct_JavaVM___', 'void__'
         ],
         'JNIHeaderDirectives': [
-            'char__', 'int__', 'void__', 'struct_JNINativeInterface___', 'struct_JNIInvokeInterface___'
+            'struct__jfieldID_', 'struct__jfieldID__',
+            'struct__jmethodID_', 'struct__jmethodID__',
+            'struct__jobject_', 'struct__jobject__',
+            'struct__jclass_', 'struct__jclass__',
+            'struct__jthrowable_', 'struct__jthrowable__',
+            'struct__jstring_', 'struct__jstring__',
+            'struct__jarray_', 'struct__jarray__',
+            'struct__jbooleanArray_', 'struct__jbooleanArray__',
+            'struct__jbyteArray_', 'struct__jbyteArray__',
+            'struct__jcharArray_', 'struct__jcharArray__',
+            'struct__jshortArray_', 'struct__jshortArray__',
+            'struct__jintArray_', 'struct__jintArray__',
+            'struct__jlongArray_', 'struct__jlongArray__',
+            'struct__jfloatArray_', 'struct__jfloatArray__',
+            'struct__jdoubleArray_', 'struct__jdoubleArray__',
+            'struct__jobjectArray_', 'struct__jobjectArray__',
+            'struct__jweak_', 'struct__jweak__',
+            'jboolean_', 'jboolean__',
+            'jbyte_', 'jbyte__',
+            'jchar_', 'jchar__',
+            'jshort_', 'jshort__',
+            'jint_', 'jint__',
+            'jlong_', 'jlong__',
+            'jfloat_', 'jfloat__',
+            'jdouble_', 'jdouble__',
+            'jsize_', 'jsize__',
+            'char__', 'int__', 'void__',
+            'struct_JNINativeInterface___', 'struct_JNIInvokeInterface___',
+            'struct_JNIEnv___', 'struct_JavaVM___'
         ]
     }
     
@@ -34,7 +61,7 @@ def fix_all():
         with open(cap_file, 'w', newline='\n') as fp:
             fp.write('\n'.join(lines) + '\n')
 
-    # Now verify signedness on ALL PointerToInfo and ConstantInfo across all cap files
+    # Verify signedness on ALL PointerToInfo and ConstantInfo across all cap files
     cap_files = glob.glob(os.path.join(cap_dir, '*.cap'))
     signed_primitives = {'int', 'short', 'long_long', 'long_long_int', 'float', 'double', 'int32_t', 'int64_t'}
 
