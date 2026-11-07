@@ -175,6 +175,7 @@ jobs:
             -H:Name=libminecraft \
             -H:CCompilerPath="$WRAPPER" \
             -H:ConfigurationFileDirectories=tools/native-build/config \
+            --initialize-at-build-time=org.apache.logging.slf4j.Log4jLogger,org.apache.logging.slf4j,org.slf4j,io.netty.util.internal.logging,com.mojang.logging.LogUtils \
             --gc=serial \
             -Ob \
             --no-fallback \
