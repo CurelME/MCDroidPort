@@ -658,3 +658,13 @@ NativeCodeInfo:JNIHeaderDirectives:StructInfo:struct_JNINativeInterface_:StructF
 NativeCodeInfo:JNIHeaderDirectives:StructInfo:struct_JavaVM_:PropertyInfo:size=8
 NativeCodeInfo:JNIHeaderDirectives:StructInfo:struct_JavaVM_:StructFieldInfo:functions:PropertyInfo:size=8
 NativeCodeInfo:JNIHeaderDirectives:StructInfo:struct_JavaVM_:StructFieldInfo:functions:PropertyInfo:offset=0
+NativeCodeInfo:JNIHeaderDirectives:PointerToInfo:char__:PropertyInfo:size=8
+NativeCodeInfo:JNIHeaderDirectives:PointerToInfo:char__:PropertyInfo:signedness=$UNSIGNED$
+NativeCodeInfo:JNIHeaderDirectives:PointerToInfo:int__:PropertyInfo:size=8
+NativeCodeInfo:JNIHeaderDirectives:PointerToInfo:int__:PropertyInfo:signedness=$UNSIGNED$
+NativeCodeInfo:JNIHeaderDirectives:PointerToInfo:void__:PropertyInfo:size=8
+NativeCodeInfo:JNIHeaderDirectives:PointerToInfo:void__:PropertyInfo:signedness=$UNSIGNED$
+NativeCodeInfo:JNIHeaderDirectives:PointerToInfo:struct_JNINativeInterface___:PropertyInfo:size=8
+NativeCodeInfo:JNIHeaderDirectives:PointerToInfo:struct_JNINativeInterface___:PropertyInfo:signedness=$UNSIGNED$
+NativeCodeInfo:JNIHeaderDirectives:PointerToInfo:struct_JNIInvokeInterface___:PropertyInfo:size=8
+NativeCodeInfo:JNIHeaderDirectives:PointerToInfo:struct_JNIInvokeInterface___:PropertyInfo:signedness=$UNSIGNED$
