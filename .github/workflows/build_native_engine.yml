@@ -157,6 +157,9 @@ jobs:
           VERSION="${{ github.event.inputs.version || '26.3' }}"
           WRAPPER="$(pwd)/tools/native-build/ndk-clang-wrapper.sh"
 
+          # Diagnostic scan of GraalVM Directives classes
+          python3 tools/native-build/inspect_directives.py || true
+
           native-image \
             --shared \
             -H:+UnlockExperimentalVMOptions \
