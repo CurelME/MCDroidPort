@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Minecraft Version (e.g. 1.21.2, 1.21.1, 1.20.4)'
+        description: 'Minecraft Version (e.g. 26.3, 1.21.2, 1.21.1, 1.20.4)'
         required: true
-        default: '1.21.2'
+        default: '26.3'
 
 permissions:
   contents: write
@@ -27,10 +27,17 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Fetch Minecraft Bytecode & Dependencies from Mojang
+        id: fetch-mc
+        run: |
+          VERSION="${{ github.event.inputs.version || '26.3' }}"
+          echo "Selected Minecraft version: $VERSION"
+          python3 tools/native-build/fetch_mojang_version.py "$VERSION" mc_assets
+
       - name: Set up GraalVM JDK with Native Image
         uses: graalvm/setup-graalvm@v1
         with:
-          java-version: '21'
+          java-version: ${{ steps.fetch-mc.outputs.java_version || '25' }}
           distribution: 'graalvm'
           github-token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -65,12 +72,6 @@ jobs:
           echo "Verified compiler wrapper:"
           tools/native-build/ndk-clang-wrapper.sh -v
 
-      - name: Fetch Minecraft Bytecode & Dependencies from Mojang
-        run: |
-          VERSION="${{ github.event.inputs.version || '1.21.2' }}"
-          echo "Selected Minecraft version: $VERSION"
-          python3 tools/native-build/fetch_mojang_version.py "$VERSION" mc_assets
-
       - name: Assemble Classpath & Compile Native Entrypoint
         run: |
           mkdir -p build_native/classes
@@ -88,17 +89,17 @@ jobs:
           echo "Classpath assembled with $(echo "$CP" | tr ':' '\n' | wc -l) jars"
 
           # Compile MinecraftNativeMain entrypoint against classpath
-          javac -cp "$CP" -d build_native/classes \
+          javac -proc:none -cp "$CP" -d build_native/classes \
             tools/native-build/src/com/mcdroidport/nativeimage/MinecraftNativeMain.java
 
           echo "CP=$CP" >> $GITHUB_ENV
 
-      - name: Compile JDK 21 Bionic Bridge & Install Static Libraries
+      - name: Compile Bionic Bridge & Install Static Libraries
         run: |
           mkdir -p build_native /tmp/staticjdk_extracted /tmp/clibs_extracted
 
-          # 1. Compile JDK 21 Bionic compatibility bridge
-          echo "Compiling JDK 21 Bionic compatibility bridge..."
+          # 1. Compile Bionic compatibility bridge
+          echo "Compiling Bionic compatibility bridge..."
           "$NDK_BIN/aarch64-linux-android30-clang" -c -fPIC -O3 \
             tools/native-build/src/jdk21_bionic_bridge.c \
             -o build_native/jdk21_bionic_bridge.o
@@ -121,15 +122,19 @@ jobs:
             "$JAVA_HOME/lib/svm/clibraries/linux-amd64/bionic"
             "$JAVA_HOME/lib/svm/clibraries/linux-aarch64/bionic"
             "$JAVA_HOME/lib/svm/clibraries/android-aarch64/bionic"
+            "$JAVA_HOME/lib/svm/clibraries/linux-aarch64"
+            "$JAVA_HOME/lib/svm/clibraries/android-aarch64"
             "$JAVA_HOME/lib/static/linux-amd64/bionic"
             "$JAVA_HOME/lib/static/linux-aarch64/bionic"
             "$JAVA_HOME/lib/static/android-aarch64/bionic"
+            "$JAVA_HOME/lib/static/linux-aarch64"
+            "$JAVA_HOME/lib/static/android-aarch64"
           )
 
           for dir in "${TARGET_DIRS[@]}"; do
             sudo mkdir -p "$dir"
-            sudo cp /tmp/staticjdk_extracted/staticjdk/lib/static/*.a "$dir/"
-            sudo cp /tmp/clibs_extracted/*.a "$dir/"
+            sudo cp /tmp/staticjdk_extracted/staticjdk/lib/static/*.a "$dir/" || true
+            sudo cp /tmp/clibs_extracted/*.a "$dir/" || true
             echo "Installed static libraries in $dir"
           done
 
@@ -149,7 +154,7 @@ jobs:
 
       - name: Compile libminecraft.so (AOT Cross-Compilation)
         run: |
-          VERSION="${{ github.event.inputs.version || '1.21.2' }}"
+          VERSION="${{ github.event.inputs.version || '26.3' }}"
           WRAPPER="$(pwd)/tools/native-build/ndk-clang-wrapper.sh"
 
           native-image \
@@ -200,20 +205,22 @@ jobs:
               f.seek(0)
               magic = f.read(4)
               assert magic == b'\x7fELF', 'Not an ELF file'
-              f.seek(40)
-              shoff = struct.unpack('<Q', f.read(8))[0]
-              f.seek(58)
-              shentsize, shnum = struct.unpack('<HH', f.read(4))
+              f.seek(32)
+              e_phoff = struct.unpack('<Q', f.read(8))[0]
+              f.seek(54)
+              e_phentsize, e_phnum = struct.unpack('<HH', f.read(4))
               dyn_offset = 0
-              for i in range(shnum):
-                  f.seek(shoff + i * shentsize + 16)
-                  shtype, shflags, shaddr, shoffset = struct.unpack('<IIQQ', f.read(24))
-                  if shtype == 6: # SHT_DYNAMIC
-                      dyn_offset = shoffset
+              dyn_size = 0
+              for i in range(e_phnum):
+                  f.seek(e_phoff + i * e_phentsize)
+                  p_type, p_flags, p_offset, p_vaddr, p_paddr, p_filesz = struct.unpack('<IIQQQQ', f.read(40))
+                  if p_type == 2: # PT_DYNAMIC
+                      dyn_offset = p_offset
+                      dyn_size = p_filesz
                       break
               if dyn_offset > 0:
                   f.seek(dyn_offset)
-                  while True:
+                  while f.tell() < dyn_offset + dyn_size:
                       pos = f.tell()
                       data = f.read(16)
                       if len(data) < 16: break
@@ -282,7 +289,7 @@ jobs:
       # Publish directly to dedicated 'engine-binaries' branch for instant raw OTA downloads
       - name: Publish to engine-binaries branch
         run: |
-          VERSION="${{ github.event.inputs.version || '1.21.2' }}"
+          VERSION="${{ github.event.inputs.version || '26.3' }}"
           git config user.name "CurelME"
           git config user.email "283661896+CurelME@users.noreply.github.com"
 

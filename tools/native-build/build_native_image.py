@@ -173,6 +173,10 @@ def build_native_library(args):
         "--no-fallback",
         f"-H:CCompilerPath={clang}",
         f"-H:ConfigurationFileDirectories={CONFIG_DIR}",
+        f"-H:NativeLinkerOption=-L{JNILIBS_DIR}",
+        "-H:NativeLinkerOption=-lsubstrate_shim",
+        "-H:NativeLinkerOption=-lmcdroid",
+        "-H:NativeLinkerOption=-Wl,-rpath,$ORIGIN",
         "-cp", classpath,
         "com.mcdroidport.nativeimage.MinecraftNativeMain",
         "-o", str(JNILIBS_DIR / "libminecraft")
